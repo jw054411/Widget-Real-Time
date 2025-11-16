@@ -17,17 +17,33 @@ class MarketViewModel: ObservableObject {
 
     private let webSocketManager = WebSocketManager.shared
     private var mockDataTimer: Timer?
+    private var backgroundTimer: Timer?
+    private let batteryOptimizer = BatteryOptimizer.shared
 
     init() {
         webSocketManager.delegate = self
+        batteryOptimizer.delegate = self
 
         // Load cached data
         loadCachedData()
+
+        // Setup background monitoring
+        setupBackgroundMonitoring()
     }
 
     // MARK: - WebSocket Control
 
     func connect() {
+        // Check battery optimizations
+        let (allowed, reason) = batteryOptimizer.shouldConnect()
+
+        if !allowed, let reason = reason {
+            print("⚡ Connection blocked: \(reason)")
+            connectionStatus = reason
+            isConnected = false
+            return
+        }
+
         if Config.useMockData {
             // Use mock data mode (works offline!)
             startMockDataMode()
@@ -35,6 +51,9 @@ class MarketViewModel: ObservableObject {
             // Use real WebSocket connection
             webSocketManager.connect()
             connectionStatus = "Connecting..."
+
+            // Start background disconnect timer if configured
+            startBackgroundDisconnectTimer()
         }
     }
 
@@ -77,6 +96,55 @@ class MarketViewModel: ObservableObject {
         print("🎭 Stopping mock data mode")
         mockDataTimer?.invalidate()
         mockDataTimer = nil
+    }
+
+    // MARK: - Background Management
+
+    private func setupBackgroundMonitoring() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+    }
+
+    @objc private func appDidEnterBackground() {
+        print("📱 App entered background")
+        if Config.backgroundDisconnectMinutes > 0 {
+            startBackgroundDisconnectTimer()
+        }
+    }
+
+    @objc private func appWillEnterForeground() {
+        print("📱 App returning to foreground")
+        backgroundTimer?.invalidate()
+        backgroundTimer = nil
+
+        // Reconnect if we should be connected
+        if !isConnected && !Config.useMockData {
+            connect()
+        }
+    }
+
+    private func startBackgroundDisconnectTimer() {
+        guard Config.backgroundDisconnectMinutes > 0 else { return }
+
+        backgroundTimer?.invalidate()
+
+        let interval = Config.backgroundDisconnectMinutes * 60
+
+        backgroundTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            print("⏰ Background timeout - disconnecting to save battery")
+            self?.disconnect()
+        }
     }
 
     // MARK: - Data Management
@@ -151,6 +219,41 @@ extension MarketViewModel: WebSocketManagerDelegate {
         DispatchQueue.main.async {
             self.isConnected = false
             self.connectionStatus = "Disconnected"
+        }
+    }
+}
+
+// MARK: - BatteryOptimizerDelegate
+
+extension MarketViewModel: BatteryOptimizerDelegate {
+    func networkTypeDidChange(isWiFi: Bool) {
+        print("📶 Network type changed: \(isWiFi ? "WiFi" : "Cellular")")
+
+        // If WiFi-only mode and we switched to cellular, disconnect
+        if Config.wifiOnlyMode && !isWiFi && isConnected {
+            print("📵 Disconnecting - WiFi-only mode enabled")
+            disconnect()
+            connectionStatus = "WiFi only - on cellular"
+        }
+        // If we're back on WiFi and should be connected, reconnect
+        else if Config.wifiOnlyMode && isWiFi && !isConnected {
+            print("📶 Reconnecting - back on WiFi")
+            connect()
+        }
+    }
+
+    func lowPowerModeDidChange(isEnabled: Bool) {
+        print("🔋 Low Power Mode: \(isEnabled ? "ON" : "OFF")")
+
+        if Config.respectLowPowerMode {
+            if isEnabled && isConnected {
+                print("💤 Disconnecting - Low Power Mode enabled")
+                disconnect()
+                connectionStatus = "Paused (Low Power Mode)"
+            } else if !isEnabled && !isConnected {
+                print("⚡ Reconnecting - Low Power Mode disabled")
+                connect()
+            }
         }
     }
 }

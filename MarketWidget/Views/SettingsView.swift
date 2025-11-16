@@ -61,6 +61,68 @@ struct SettingsView: View {
                 }
             }
 
+            Section(header: Text("Battery Optimization"), footer: Text("These settings help extend battery life, especially recommended for iPhone 13 mini")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "clock")
+                            .foregroundColor(.green)
+                        Text("Market Hours Only")
+                        Spacer()
+                        Image(systemName: Config.onlyConnectDuringMarketHours ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(Config.onlyConnectDuringMarketHours ? .green : .gray)
+                    }
+                    Text("Only connect 9:30 AM - 4:00 PM ET Mon-Fri (saves ~40%)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "wifi")
+                            .foregroundColor(.blue)
+                        Text("WiFi Only Mode")
+                        Spacer()
+                        Image(systemName: Config.wifiOnlyMode ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(Config.wifiOnlyMode ? .green : .gray)
+                    }
+                    Text("Only connect on WiFi, not cellular (saves ~30%)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "battery.25")
+                            .foregroundColor(.orange)
+                        Text("Respect Low Power Mode")
+                        Spacer()
+                        Image(systemName: Config.respectLowPowerMode ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(Config.respectLowPowerMode ? .green : .gray)
+                    }
+                    Text("Auto-pause when Low Power Mode enabled")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "moon.zzz")
+                            .foregroundColor(.purple)
+                        Text("Background Disconnect")
+                        Spacer()
+                        Text("\(Int(Config.backgroundDisconnectMinutes))m")
+                            .foregroundColor(.secondary)
+                    }
+                    Text("Auto-disconnect after \(Int(Config.backgroundDisconnectMinutes)) minutes in background")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Section(header: Text("Battery Status")) {
+                BatteryStatusView()
+            }
+
             Section {
                 Button(action: saveSettings) {
                     HStack {
