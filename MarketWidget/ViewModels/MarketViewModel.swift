@@ -16,6 +16,7 @@ class MarketViewModel: ObservableObject {
     @Published var lastUpdate: Date?
 
     private let webSocketManager = WebSocketManager.shared
+    private var mockDataTimer: Timer?
 
     init() {
         webSocketManager.delegate = self
@@ -27,12 +28,22 @@ class MarketViewModel: ObservableObject {
     // MARK: - WebSocket Control
 
     func connect() {
-        webSocketManager.connect()
-        connectionStatus = "Connecting..."
+        if Config.useMockData {
+            // Use mock data mode (works offline!)
+            startMockDataMode()
+        } else {
+            // Use real WebSocket connection
+            webSocketManager.connect()
+            connectionStatus = "Connecting..."
+        }
     }
 
     func disconnect() {
-        webSocketManager.disconnect()
+        if Config.useMockData {
+            stopMockDataMode()
+        } else {
+            webSocketManager.disconnect()
+        }
         connectionStatus = "Disconnected"
         isConnected = false
     }
@@ -42,6 +53,30 @@ class MarketViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.connect()
         }
+    }
+
+    // MARK: - Mock Data Mode
+
+    private func startMockDataMode() {
+        print("🎭 Starting MOCK DATA mode (offline testing)")
+        connectionStatus = "Mock Data Mode"
+        isConnected = true
+
+        // Generate initial mock data
+        let mockData = MockDataGenerator.shared.generateCurrentMarketData()
+        mockData.forEach { updateMarketData(with: $0) }
+
+        // Start periodic updates
+        mockDataTimer = Timer.scheduledTimer(withTimeInterval: Config.mockDataInterval, repeats: true) { [weak self] _ in
+            let newMockData = MockDataGenerator.shared.generateCurrentMarketData()
+            newMockData.forEach { self?.updateMarketData(with: $0) }
+        }
+    }
+
+    private func stopMockDataMode() {
+        print("🎭 Stopping mock data mode")
+        mockDataTimer?.invalidate()
+        mockDataTimer = nil
     }
 
     // MARK: - Data Management
